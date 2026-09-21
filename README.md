@@ -49,5 +49,18 @@ homework runner.
 
 
 ## Homework 1 solution: 
-> to students: please fill your solution description here.
+
+### Chain design
+
+```mermaid
+flowchart LR
+    A[Receipt images input] --> B[LLM: Read into structured input<br/>subtotal, discounts, rounding, final_payment]
+    B --> C[Python: Compute<br/>Q1 = sum of final_payment<br/>Q2 = sum of subtotal + discounts]
+    C --> D[Check against ground truth<br/>correct / incorrect]
+    D --> E[Output<br/>Q1, Q2 and their results, and correctness]
+```
+
+### Description
+
+My chain separates extraction from arithmetic. In `build_chain()` I create a single LangChain pipeline that combines a `ChatPromptTemplate` with the vision-capable `deepseek-v4-flash-vision-exp` model and a `JsonOutputParser`. Each receipt image is encoded as a base64 data URL by the provided `image_data_url()` helper, embedded as an `image_url` block in a multimodal human message, and the model is asked to return a strict JSON object with four keys: `subtotal`, `discounts` (all promotions, coupons and percentage discounts as positive numbers), `rounding`, and `final_payment` (the amount actually paid after rounding). In `answer_queries()` I call `chain.batch()` over all receipts in the folder, which keeps each receipt independent and lets the chain run in parallel. I then perform all arithmetic in plain Python: `QUERY_1` is the sum of every receipt's `final_payment`, and `QUERY_2` is the sum of every receipt's `subtotal` plus its `discounts` (rounding is deliberately excluded). Both totals are formatted with `Decimal.quantize(Decimal("0.01"))` and returned as strings such as `"HK$1974.30"`, so each response contains exactly one HKD amount. The runner then writes `results.csv`, compares each answer against `public_test/ground_truth.json`, and the final `results.csv` reports `correct` for both queries. Keeping the LLM responsible only for reading the receipt and Python responsible for the totals makes the result reproducible and easy to debug.
 
