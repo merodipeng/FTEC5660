@@ -63,7 +63,31 @@ def build_chain() -> Any:
     ``deepseek-v4-flash-vision-exp``. The API key is loaded from .env.
     """
     ### YOUR CODE HERE
-    return None
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.output_parsers import JsonOutputParser
+    from langchain_deepseek import ChatDeepSeek
+
+    llm = ChatDeepSeek(
+        model="deepseek-v4-flash-vision-exp",
+        temperature=0.2,
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are an expert at reading supermarket receipts. Extract numbers exactly as printed."),
+        ("human", [
+            {"type": "text", "text": (
+                "Look at this receipt image. Return JSON ONLY with exactly these 4 keys:\n"
+                "- subtotal (number): the SUBTOTAL line\n"
+                "- discounts (list of positive numbers): every discount/promotion/coupon line\n"
+                "- rounding (number): the ROUNDING line, can be negative\n"
+                "- final_payment (number): the final amount paid after rounding\n"
+                "Do not include any explanation or markdown. Return JSON only."
+            )},
+            {"type": "image_url", "image_url": {"url": "{image_data}"}},
+        ]),
+    ])
+
+    return prompt | llm | JsonOutputParser()
 
 
 def answer_queries(chain: Any, images: list[Path]) -> dict[str, Any]:
@@ -79,8 +103,46 @@ def answer_queries(chain: Any, images: list[Path]) -> dict[str, Any]:
     to process independent receipt-extraction prompts in parallel.
     """
     ### YOUR CODE HERE
-    _ = (chain, images)
-    return {QUERY_1: DUMMY_RESPONSE, QUERY_2: DUMMY_RESPONSE}
+def _to_decimal(value: Any) -> Decimal:
+    """Safely convert a value to Decimal, treating None/invalid as 0."""
+    if value is None:
+        return Decimal("0")
+    if isinstance(value, (int, float, Decimal)):
+        return Decimal(str(value))
+    if isinstance(value, str):
+        cleaned = re.sub(r"[^\d.\-]", "", value)
+        if not cleaned:
+            return Decimal("0")
+        try:
+            return Decimal(cleaned)
+        except InvalidOperation:
+            return Decimal("0")
+    return Decimal("0")
+
+
+def answer_queries(chain: Any, images: list[Path]) -> dict[str, Any]:
+    """Run your chain and return one response for each exact query string."""
+    inputs = [{"image_data": image_data_url(path)} for path in images]
+    results = chain.batch(inputs)
+
+    total_spent = Decimal("0")
+    total_without_discount = Decimal("0")
+
+    for r in results:
+        if not isinstance(r, dict):
+            continue
+        final_payment = _to_decimal(r.get("final_payment", 0))
+        subtotal = _to_decimal(r.get("subtotal", 0))
+        discounts = r.get("discounts", []) or []
+        discount_sum = sum((_to_decimal(d) for d in discounts), Decimal("0"))
+
+        total_spent += final_payment
+        total_without_discount += subtotal + discount_sum
+
+    return {
+        QUERY_1: f"HK${total_spent.quantize(Decimal('0.01'))}",
+        QUERY_2: f"HK${total_without_discount.quantize(Decimal('0.01'))}",
+    }
 
 
 # Everything below is provided runner/scoring code. No edits are needed.
