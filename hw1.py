@@ -73,30 +73,19 @@ def build_chain() -> Any:
     )
 
     prompt = ChatPromptTemplate.from_messages([
-    ("system",
-     "You are an expert at reading supermarket receipts. "
-     "Extract numbers exactly as printed. Never guess."),
-    ("human", [
-        {"type": "text", "text": (
-            "Look at this receipt image and return a JSON object with EXACTLY these 4 keys:\n"
-            "- subtotal (number): the SUBTOTAL line, after discounts and before rounding\n"
-            "- discounts (list of numbers): every DISCOUNT, PROMOTION, COUPON, "
-            "MEMBER DISCOUNT, or PERCENTAGE OFF line as POSITIVE numbers. "
-            "If there are no discount lines, return an EMPTY LIST [].\n"
-            "- rounding (number): the ROUNDING line, may be negative\n"
-            "- final_payment (number): the final amount paid after rounding\n"
-            "Rules:\n"
-            "- Return JSON ONLY. No markdown, no explanation.\n"
-            "- discounts is always a LIST. Use [] when there are no discounts.\n"
-            "- IMPORTANT: Service charges, tips, delivery fees, packaging fees, "
-            "and any line that INCREASES the total are NOT discounts. "
-            "Do NOT put them in the discounts list.\n"
-            "- Only include lines that REDUCE the amount the customer pays.\n"
-            "- Do NOT include ROUNDING in the discounts list."
-        )},
-        {"type": "image_url", "image_url": {"url": "{image_data}"}},
-    ]),
-])
+        ("system", "You are an expert at reading supermarket receipts. Extract numbers exactly as printed."),
+        ("human", [
+            {"type": "text", "text": (
+                "Look at this receipt image. Return JSON ONLY with exactly these 4 keys:\n"
+                "- subtotal (number): the SUBTOTAL line\n"
+                "- discounts (list of positive numbers): every discount/promotion/coupon line\n"
+                "- rounding (number): the ROUNDING line, can be negative\n"
+                "- final_payment (number): the final amount paid after rounding\n"
+                "Do not include any explanation or markdown. Return JSON only."
+            )},
+            {"type": "image_url", "image_url": {"url": "{image_data}"}},
+        ]),
+    ])
 
     return prompt | llm | JsonOutputParser()
 
